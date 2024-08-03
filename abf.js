@@ -1,94 +1,123 @@
 (function() {
     'use strict';
 
-    const randomize = (base, deviation) => base + (Math.random() * deviation - deviation / 2);
+    const spoofLanguage = 'en-US';
+    const spoofTimezone = 'America/New_York';
 
-    // Canvas fingerprinting
-    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-    HTMLCanvasElement.prototype.toDataURL = function(type) {
-        const context = this.getContext('2d');
-        const imageData = context.getImageData(0, 0, this.width, this.height);
-        for (let i = 0; i < imageData.data.length; i += 4) {
-            imageData.data[i] = randomize(imageData.data[i], 10);     // R
-            imageData.data[i + 1] = randomize(imageData.data[i + 1], 10); // G
-            imageData.data[i + 2] = randomize(imageData.data[i + 2], 10); // B
+    // Spoof navigator.language and navigator.languages
+    Object.defineProperty(navigator, 'language', {
+        get: function() {
+            return spoofLanguage;
         }
-        context.putImageData(imageData, 0, 0);
-        return originalToDataURL.apply(this, arguments);
+    });
+    Object.defineProperty(navigator, 'languages', {
+        get: function() {
+            return [spoofLanguage];
+        }
+    });
+
+    // Spoof Intl.DateTimeFormat
+    const originalDateTimeFormat = Intl.DateTimeFormat;
+    Intl.DateTimeFormat = function(locale, options) {
+        return new originalDateTimeFormat(spoofLanguage, options);
     };
 
-    // WebGL fingerprinting
-    const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+    // Spoof timezone offset
+    Date.prototype.getTimezoneOffset = function() {
+        return -new Date().getTimezoneOffset();
+    };
+
+    // Spoof geolocation API
+    navigator.geolocation.getCurrentPosition = function(success, error, options) {
+        const mockPosition = {
+            coords: {
+                latitude: 40.7128,
+                longitude: -74.0060,
+                accuracy: 1,
+                altitude: null,
+                altitudeAccuracy: null,
+                heading: null,
+                speed: null
+            },
+            timestamp: Date.now()
+        };
+        success(mockPosition);
+    };
+
+    // Spoof WebGL
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
     WebGLRenderingContext.prototype.getParameter = function(parameter) {
-        const result = originalGetParameter.call(this, parameter);
-        if (typeof result === 'number') {
-            return randomize(result, 0.1);
+        if (parameter === 37445) {
+            return 'Intel Inc.';
         }
-        return result;
-    };
-
-    // Audio fingerprinting
-    const originalGetFloatFrequencyData = AnalyserNode.prototype.getFloatFrequencyData;
-    AnalyserNode.prototype.getFloatFrequencyData = function(array) {
-        originalGetFloatFrequencyData.call(this, array);
-        for (let i = 0; i < array.length; i++) {
-            array[i] = randomize(array[i], 0.1);
+        if (parameter === 37446) {
+            return 'Intel(R) Iris(TM) Graphics 6100';
         }
+        return getParameter(parameter);
     };
 
-    // Font fingerprinting
-    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
-    CanvasRenderingContext2D.prototype.measureText = function(text) {
-        const metrics = originalMeasureText.apply(this, arguments);
-        metrics.width = randomize(metrics.width, 0.1);
-        return metrics;
-    };
-
-    // Navigator language and geolocation
-    Object.defineProperty(navigator, 'language', { value: 'en-US' });
-    Object.defineProperty(navigator, 'languages', { value: ['en-US'] });
-    Object.defineProperty(navigator, 'userLanguage', { value: 'en-US' });
-    Object.defineProperty(navigator, 'browserLanguage', { value: 'en-US' });
-    Object.defineProperty(navigator, 'systemLanguage', { value: 'en-US' });
-
-    // Geolocation API
-    const mockGeolocation = {
-        getCurrentPosition: function(success, error, options) {
-            success({
-                coords: {
-                    latitude: 51.509865,  // Example coordinates
-                    longitude: -0.118092,
-                    accuracy: 10,
-                    altitude: null,
-                    altitudeAccuracy: null,
-                    heading: null,
-                    speed: null
-                },
-                timestamp: Date.now()
-            });
-        },
-        watchPosition: function(success, error, options) {
-            return setInterval(() => {
-                success({
-                    coords: {
-                        latitude: 51.509865,
-                        longitude: -0.118092,
-                        accuracy: 10,
-                        altitude: null,
-                        altitudeAccuracy: null,
-                        heading: null,
-                        speed: null
-                    },
-                    timestamp: Date.now()
-                });
-            }, 10000);
-        },
-        clearWatch: function(id) {
-            clearInterval(id);
+    const getExtension = WebGLRenderingContext.prototype.getExtension;
+    WebGLRenderingContext.prototype.getExtension = function(name) {
+        if (name === 'WEBGL_debug_renderer_info') {
+            return null;
         }
+        return getExtension(name);
     };
 
-    navigator.geolocation = mockGeolocation;
+    const getSupportedExtensions = WebGLRenderingContext.prototype.getSupportedExtensions;
+    WebGLRenderingContext.prototype.getSupportedExtensions = function() {
+        return getSupportedExtensions().filter(name => name !== 'WEBGL_debug_renderer_info');
+    };
+
+    // Spoof fonts
+    const originalGetComputedStyle = window.getComputedStyle;
+    window.getComputedStyle = function(element, pseudoElt) {
+        const style = originalGetComputedStyle(element, pseudoElt);
+        const fontFamilies = ['Arial', 'Helvetica', 'sans-serif'];
+        style.fontFamily = fontFamilies.join(',');
+        return style;
+    };
+
+    // Spoof Canvas
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(contextType) {
+        const context = originalGetContext.apply(this, arguments);
+        if (contextType === '2d' || contextType === 'webgl' || contextType === 'webgl2') {
+            const originalGetImageData = context.getImageData;
+            context.getImageData = function(x, y, width, height) {
+                const imageData = originalGetImageData.apply(this, arguments);
+                for (let i = 0; i < imageData.data.length; i += 4) {
+                    imageData.data[i] = imageData.data[i] ^ 0xFF;  // Invert the color for fingerprinting
+                }
+                return imageData;
+            };
+        }
+        return context;
+    };
+
+    // Spoof AudioContext
+    const originalAudioContext = window.AudioContext;
+    const originalOfflineAudioContext = window.OfflineAudioContext;
+    const spoofSampleRate = 44100;
+
+    window.AudioContext = function() {
+        const context = new originalAudioContext();
+        Object.defineProperty(context, 'sampleRate', {
+            get: function() {
+                return spoofSampleRate;
+            }
+        });
+        return context;
+    };
+
+    window.OfflineAudioContext = function() {
+        const context = new originalOfflineAudioContext(arguments[0], arguments[1], arguments[2]);
+        Object.defineProperty(context, 'sampleRate', {
+            get: function() {
+                return spoofSampleRate;
+            }
+        });
+        return context;
+    };
 
 })();
-
