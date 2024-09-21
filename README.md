@@ -1,47 +1,5 @@
 
 
-    
-
-  
-
-- Автоматизация задач.едаете ключ в заголовке `Authorization` или через библиотеку `openai`.
-
-Вот где это будет использовано в общем виде:
-
-```python
-import openai
-
-# Настройка API ключа
-openai.api_key = "ваш_ключ_API"
-
-# Пример запроса к GPT через OpenAI API
-response = openai.Completion.create(
-  engine="text-davinci-003",
-  prompt="Ваш запрос к модели",
-  max_tokens=150
-)
-
-# Обработка ответа
-print(response.choices[0].text)
-```
-
-В вашем проекте, где бот работает через Flask-сервер, API key будет включен в функцию, которая отвечает за отправку запроса к модели. 
-
-**Пример с Flask**:
-
-```python
-from flask import Flask, request, jsonify
-import openai
-
-app = Flask(__name__)
-
-# Вставьте ваш API ключ OpenAI
-openai.api_key = "ваш_ключ_API"
-
-@app.route('/bot_action', methods=['POST'])
-def bot_action():
-    data = request.get_json()
-    action = data.get('action')
     response = execute_bot_action(action)
     return jsonify({'status': 'success', 'result': response})
 
